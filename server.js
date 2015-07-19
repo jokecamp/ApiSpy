@@ -70,17 +70,16 @@ var saveRequestStats = function(hit) {
   client.LPUSH("stats:requests", JSON.stringify(hit));
   client.LTRIM("stats:requests", 0, 200);
 
-  client.LPUSH("stats:requests:ms", hit.elapsed);
-  client.LTRIM("stats:requests:ms", 0, 1000);
-
   // keep list of unique urls
   client.SADD('stats:urls', hit.url);
 
   saveStats("stats:hits:", hit);
-
+  saveStats("stats:hits:" + hit.url + ":", hit);
 };
 
 var saveStats = function(keyPrefix, hit) {
+
+  client.LPUSH(keyPrefix + "ms", hit.elapsed);
 
   // counters
   countersByRequest.forEach(function(item) {
