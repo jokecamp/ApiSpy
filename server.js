@@ -16,20 +16,38 @@ client.on("error", function (err) {
 });
 
 server.get('/stats', function (req, res, next) {
-  var stats = { counts: {} };
-  client.GET("total", function (err, result) {
-    stats.counts.total = result;
-    res.send(stats);
-    return next();
+  client.multi()
+    .get("stats:hits")
+    .smembers('stats:urls')
+    .lrange('stats:requests', 0, 200)
+    .exec(function (err, replies) {
+      res.send(replies);
+      return next();
   });
 });
 
+var saveUrlStats = function(hit) {
+
+  // keep list of last 200 requests
+  client.LPUSH("stats:requests", JSON.stringify(hit));
+  client.LTRIM("stats:requests", 0, 200);
+
+  client.LPUSH("stats:requests:ms", hit.elapsedms);
+  client.LTRIM("stats:requests:ms", 0, 1000);
+
+  client.INCR("stats:hits:" + hit.server);
+  client.INCR("stats:hits:" + hit.apikey, redis.print);
+
+  client.INCR("stats:hits");
+  client.SADD('stats:urls', hit.url);
+  client.INCR('stats:hits:' + hit.url + ':hits', redis.print);
+};
+
 server.post('/stats', function(req, res, next) {
-  client.INCR("total", redis.print);
-  client.GET("total", function (err, result) {
-    res.send(result);
-    return next();
-  });
+  console.log(req.body);
+  saveUrlStats(req.body);
+  res.send("success");
+  return next();
 });
 
 server.listen(8080, function () {
