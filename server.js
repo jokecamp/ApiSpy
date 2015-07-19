@@ -15,37 +15,85 @@ client.on("error", function (err) {
     console.log("Error " + err);
 });
 
-server.get('/stats', function (req, res, next) {
-  client.multi()
-    .get("stats:hits")
+var countersByRequest = ['url', 'server', 'apikey', 'statuscode', 'verb', 'user'];
+
+var getKeys = function(callback) {
+
+  var multi = client.multi()
     .smembers('stats:urls')
-    .lrange('stats:requests', 0, 200)
-    .exec(function (err, replies) {
-      res.send(replies);
-      return next();
+    .smembers('stats:hits:counters');
+
+  multi.exec(function (err, replies) {
+    var props = {};
+    props["stats:urls"] = replies[0];
+    props["stats:hits:counters"] = replies[1];
+    callback(props);
   });
+
+};
+
+server.get('/stats', function (req, res, next) {
+
+  getKeys(function(props) {
+
+    var data = {};
+    var multi = client.multi();
+
+    multi.get('stats:hits', function(err, reply) {
+      data.hits = reply;
+    });
+
+    props["stats:hits:counters"].forEach(function(item) {
+      multi.get(item, function(err, reply) {
+        data[item] = reply;
+      });
+    });
+
+    multi.exec(function(err, replies) {
+
+      res.send(data);
+      return next();
+
+    });
+
+  });
+
 });
 
-var saveUrlStats = function(hit) {
+
+var saveRequestStats = function(hit) {
+
+  // total api hit
+  client.INCR("stats:hits");
 
   // keep list of last 200 requests
   client.LPUSH("stats:requests", JSON.stringify(hit));
   client.LTRIM("stats:requests", 0, 200);
 
-  client.LPUSH("stats:requests:ms", hit.elapsedms);
+  client.LPUSH("stats:requests:ms", hit.elapsed);
   client.LTRIM("stats:requests:ms", 0, 1000);
 
-  client.INCR("stats:hits:" + hit.server);
-  client.INCR("stats:hits:" + hit.apikey, redis.print);
-
-  client.INCR("stats:hits");
+  // keep list of unique urls
   client.SADD('stats:urls', hit.url);
-  client.INCR('stats:hits:' + hit.url + ':hits', redis.print);
+
+  saveStats("stats:hits:", hit);
+
+};
+
+var saveStats = function(keyPrefix, hit) {
+
+  // counters
+  countersByRequest.forEach(function(item) {
+    var key = keyPrefix + hit[item];
+    client.SADD(keyPrefix + "counters", key);
+    client.INCR(key);
+  });
+
 };
 
 server.post('/stats', function(req, res, next) {
   console.log(req.body);
-  saveUrlStats(req.body);
+  saveRequestStats(req.body);
   res.send("success");
   return next();
 });
