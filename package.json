@@ -1,0 +1,15 @@
+{
+  "name": "ApiSpy",
+  "version": "1.0.0",
+  "description": "API monitor and stats",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Joe Kampschmidt",
+  "license": "MIT",
+  "dependencies": {
+    "redis": "^0.12.1",
+    "restify": "^3.0.3"
+  }
+}
